@@ -9,13 +9,11 @@ def subtract_region(regions, start, end, final=True):
 		if rEnd > rBeg and rBeg <= start < rEnd and end <= rEnd:  # Found the region to modify
 			new_regions = []
 
-			if final and rBeg < start:  # Keep left portion
+			if not final or rBeg < start:  # Keep left portion
 				new_regions.append((rBeg, start))
-			new_regions.append((rBeg, start))
 			
-			if final and end < rEnd:  # Keep right portion
+			if not final or end < rEnd:  # Keep right portion
 				new_regions.append((end, rEnd))
-			new_regions.append((end, rEnd))
 
 			regions[i:i+1] = new_regions  # Directly modify regions
 			return  # Exit after modifying the first match
