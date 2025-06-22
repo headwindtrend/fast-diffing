@@ -79,6 +79,74 @@ That’s all it needs to be.
 
 ---
 
+## 🧠 Smarter Alignment: A New Heuristic (June 22, 2025)
+
+### 🔍 Why This Was Needed
+The original exclude_common_strings() used a sliding-window mechanism to detect common substrings. This worked well — until both strings were the same length (or their length difference was smaller than the displacement of the common region) and the common region was displaced.
+
+Example:
+```
+a = "Why the quick brown fox jumped over the lazy dog? Bored?"
+b = "The quick brown fox jumped over the lazy dog, who cares!"
+```
+These strings clearly share "he quick brown fox jumped over the lazy dog", but the sliding approach fails to detect it — because when both strings are the same length, no sliding occurs.
+This rare case is unlikely during typical editing events (e.g., tracked via Sublime's `on_modified()`), since real-time edits usually:
+* Cannot make multiple distinct modifications at one go
+* Displacement would not greater than length difference
+* Or no displacement at all
+
+However, in broader diffing applications (e.g., document comparison), this can happen — so a fix was warranted.
+
+---
+
+### 🛠️ The Fix: Interval-Mapped Alignment
+I introduced a fallback alignment method using interval maps based on a frequently occurring character (typically a space):
+* Identify the most common character (limited to ~100 instances for performance).
+* Extract interval maps — counts of characters between each occurrence.
+* Slide the shorter map over the longer one to find the best alignment.
+* Compare regions based on matching intervals and reconstruct matching spans.
+
+This technique is effective in uncovering displaced common substrings even when the original sliding method fails.
+
+---
+
+### ⚙️ Smart Switching
+This new approach is used only when needed, based on a heuristic check:
+* If the detected common region is suspiciously short, or
+* If the mismatch streak density seems abnormally high
+
+These "fishy" signals trigger the fallback. Otherwise, the faster, original sliding method is used — keeping typical performance optimal.
+
+---
+
+### 🚀 Performance Snapshot
+```
+before = sublime.get_clipboard()  # contains a block of text with 10000 characters copied from any typical text files
+after  = before[1000:3000] + before[5000:10000] + before[:1000] + before[3000:5000]
+
+exclude_common_strings(before, after)
+# Output: [[(0, 1000), (3000, 5000)], [(7000, 10000)]]
+# Elapsed time: ~0.34s
+
+# Compare with difflib:
+SequenceMatcher(None, before, after).get_opcodes()
+# Output: [('delete', 0, 1000, 0, 0), ('equal', 1000, 3000, 0, 2000), ('insert', 3000, 3000, 2000, 8000), ('equal', 3000, 5000, 8000, 10000), ('delete', 5000, 10000, 10000, 10000)]
+# Elapsed time: ~0.79s
+```
+✅ My method:
+* Faster (~2×)
+* More accurate, finding the true longest common block (5,000 characters)
+
+---
+
+### ✨ TL;DR
+* Problem: Sliding window failed when both strings were the same length and contained displaced common content.
+* Fix: Interval-based alignment using character distribution.
+* Behavior: Smart fallback — used only when the match looks suspicious.
+* For applications other than real-time editing tracking, this new method should be the default instead. (yes, it's indeed mostly slower than the original sliding-window method but it's more robust on the other hand. so, for applications less sensitive to response time, this could be the better choice.)
+
+---
+
 ## 📁 Status
 
 This is currently part of a broader plugin project. Contributions, bug reports, or performance comparisons are welcome.
