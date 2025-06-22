@@ -1,6 +1,6 @@
 import sublime
 import time
-from itertools import accumulate
+from itertools import accumulate, groupby
 import math
 
 def subtract_region(regions, start, end, final=True):
@@ -84,8 +84,31 @@ def exclude_common_strings(a, b, start_time=0, a_base=0, b_base=0, final=True, m
 		start = (len(stream) - round((max_encoded - length) * scale)) % len(stream)
 		return ((start, length) if max_encoded else (0, 0)), bao + start
 
+	def find_longest_ones_v2(stream, bao=0, flip_scenario=False):
+		if not stream:  # probably due to max_tolerence reached
+			return False
+
+		# Track (current_streak_key, current_streak_start, current_streak_length, max_streak_start, max_streak_length)
+		groups = [(k, 0, len(list(g)), 0, 0) for k, g in groupby(stream)]
+		groups.insert(0, (0, 0, 0, 0, 0))
+		result = list(accumulate(
+			groups,
+			lambda acc, x: (
+				x[0],
+				acc[1] + acc[2],
+				x[2],
+				acc[1] + acc[2] if x[0] == 1 and x[2] > acc[4] else acc[3],
+				max(acc[4], x[2] if x[0] == 1 else 0)
+			)
+		))
+
+		start = result[-1][3]
+		length = result[-1][4]
+		return (((bao if flip_scenario else 0) + start, length) if result and len(result) == len(groups) else (0, 0)), (0 if flip_scenario else bao) + start, len(groups)
+
 	def longest_common_string(a, b, start_time, max_tolerence):
-		return find_longest_ones(*likeness_terrain(a, b, start_time, max_tolerence))
+		return find_longest_ones_v2(*likeness_terrain(a, b, start_time, max_tolerence))
+		# return find_longest_ones(*likeness_terrain(a, b, start_time, max_tolerence))
 
 	len_a, len_b = len(a), len(b)
 
