@@ -1,6 +1,7 @@
 import sublime
 import time
 from itertools import accumulate, groupby
+from collections import Counter
 import math
 
 def subtract_region(regions, start, end, final=True):
@@ -18,7 +19,7 @@ def subtract_region(regions, start, end, final=True):
 			regions[i:i+1] = new_regions  # Directly modify regions
 			return  # Exit after modifying the first match
 
-def exclude_common_strings(a, b, start_time=0, a_base=0, b_base=0, final=True, max_tolerence=3):
+def exclude_common_strings(a, b, depth=0, start_time=0, a_base=0, b_base=0, final=True, max_tolerence=3):
 	if not start_time:
 		start_time = time.time()
 
@@ -55,6 +56,117 @@ def exclude_common_strings(a, b, start_time=0, a_base=0, b_base=0, final=True, m
 			a if a_is_shorter else a[bao:bao+shorter_len],
 			b if b_is_shorter else b[bao:bao+shorter_len]
 		)], bao
+
+	def likeness_terrain_v2(a, b, start_time, max_tolerence):
+		if a == b:
+			return list(1 for _ in range(len(a))), 0
+		len_a, len_b = len(a), len(b)
+		if len_a * len_b == 0:
+			return list(0 for _ in range(len_a + len_b)), len_a + len_b
+
+		if len_a + len_b < 200:
+			print("relatively short, so goes raw.")
+			shtr_str = a if len_a <= len_b else b
+			lngr_str = b if len_a <= len_b else a
+			shtr_len = len_a if len_a <= len_b else len_b
+			lngr_len = len_b if len_a <= len_b else len_a
+			max_start, max_len, index_of_max = 0, 0, 0
+			for i in range(1 - shtr_len, lngr_len):
+				css_filled, current_streak_start, current_streak_len = False, 0, 0
+				si = i - (lngr_len - shtr_len)
+				start, end = round((abs(i) - i) / 2), shtr_len - round((abs(si) + si) / 2)
+				for j in range(start, end):
+					if time.time() - start_time > max_tolerence:
+						return False, False
+					if lngr_str[i+j:i+j+1] == shtr_str[j:j+1]:
+						if not css_filled:
+							current_streak_start, css_filled = j, True
+						current_streak_len += 1
+						if current_streak_len > max_len:
+							index_of_max = i
+							max_start = current_streak_start
+							max_len = current_streak_len
+					else:
+						css_filled, current_streak_start, current_streak_len = False, 0, 0
+			shtr_adj = 1 if max_start > 0 and max_start + index_of_max > 0 else 0
+			shtr_headroom = max_start - shtr_adj
+			lngr_adj = 1 if max_start > 0 and max_start + index_of_max > 0 else 0
+			lngr_headroom = max_start + index_of_max - lngr_adj
+			offset_a = shtr_headroom if len_a <= len_b else lngr_headroom
+			offset_b = lngr_headroom if len_a <= len_b else shtr_headroom
+		else:
+
+			def my_favorite_member(iterable):
+				counter, length = Counter(iterable), len(iterable)
+				if counter and counter.most_common(1)[0][1] > 100:
+					for k, v in counter.most_common():
+						if v < 100:
+							print("mfm:", k, v)
+							return k
+					print("mfm:", k, v)
+					return k
+				else:
+					return counter.most_common(1)[0][0]
+
+			def extract_interval_map(iterable, target_member=" "):
+				indices = [i for i, m in enumerate(iterable) if m == target_member]
+				indices.insert(0, -1)
+				indices.append(len(iterable))
+				return [j - i - 1 for i, j in zip(indices, indices[1:])]
+
+			def my_list_get(target_list, target_index, default_value=None):
+				return target_list[target_index] if target_index >= 0 and target_index < len(target_list) else default_value
+
+			mfm = my_favorite_member(a if len(a) <= len(b) else b)
+			a_map = extract_interval_map(a, mfm)
+			b_map = extract_interval_map(b, mfm)
+			longer_map = b_map if len(a_map) <= len(b_map) else a_map
+			shorter_map = a_map if len(a_map) <= len(b_map) else b_map
+			max_start, max_len, index_of_max = 0, 0, 0
+			# debug = {}
+			for i in range(1 - len(shorter_map), len(longer_map)):
+				# debug[i] = []
+				css_filled, current_streak_start, current_streak_len = False, 0, 0
+				si = i - (len(longer_map) - len(shorter_map))
+				start, end = round((abs(i) - i) / 2), len(shorter_map) - round((abs(si) + si) / 2)
+				for j in range(start, end):
+					if time.time() - start_time > max_tolerence:
+						return False, False
+					shtr_interval = my_list_get(shorter_map, j, "out of shorter_map range")
+					lngr_interval = my_list_get(longer_map, i+j, "out of longer_map range")
+					if lngr_interval == shtr_interval:
+						# debug[i].append((i+j, j, shorter_map[j]))
+						if not css_filled:
+							current_streak_start, css_filled = j, True
+						current_streak_len += shorter_map[j] + 1
+						if current_streak_len > max_len:
+							index_of_max = i
+							max_start = current_streak_start
+							max_len = current_streak_len
+					else:
+						# debug[i].append((i+j, j, 0))
+						css_filled, current_streak_start, current_streak_len = False, 0, 0
+			shtr_adj = 1 if max_start > 0 and max_start + index_of_max > 0 else 0
+			shtr_headroom = sum(shorter_map[j] + 1 for j in range(max_start)) - shtr_adj
+			lngr_adj = 1 if max_start > 0 and max_start + index_of_max > 0 else 0
+			lngr_headroom = sum(longer_map[j] + 1 for j in range(max_start + index_of_max)) - lngr_adj
+			offset_a = shtr_headroom if len(a_map) <= len(b_map) else lngr_headroom
+			offset_b = lngr_headroom if len(a_map) <= len(b_map) else shtr_headroom
+			# print("best alignment:")
+			# print('  "a" string from pos', offset_a)
+			# print('  "b" string from pos', offset_b)
+			# adj_a = shtr_adj if len(a_map) <= len(b_map) else lngr_adj
+			# adj_b = lngr_adj if len(a_map) <= len(b_map) else shtr_adj
+			# adj_a -= 0 if offset_a+max_len+adj_a < len(a) and offset_b+max_len+adj_b < len(b) else 1
+			# adj_b -= 0 if offset_a+max_len+adj_a < len(a) and offset_b+max_len+adj_b < len(b) else 1
+			# print("  a:", repr(a[offset_a:offset_a+max_len+adj_a]))
+			# print("  b:", repr(b[offset_b:offset_b+max_len+adj_b]))
+
+		bao = abs(offset_a - offset_b)
+		return [(ca == cb) + 0 for ca, cb in zip(
+			a[bao:bao+len_a+len_b] if offset_a > offset_b else a,
+			b if offset_a > offset_b else b[bao:bao+len_a+len_b]
+		)], bao, offset_a > offset_b or len_a > len_b
 
 	def find_longest_ones(stream, bao=0):
 		if not stream:  # probably due to max_tolerence reached
@@ -110,6 +222,9 @@ def exclude_common_strings(a, b, start_time=0, a_base=0, b_base=0, final=True, m
 		return find_longest_ones_v2(*likeness_terrain(a, b, start_time, max_tolerence))
 		# return find_longest_ones(*likeness_terrain(a, b, start_time, max_tolerence))
 
+	def longest_common_string_v2(a, b, start_time, max_tolerence):
+		return find_longest_ones_v2(*likeness_terrain_v2(a, b, start_time, max_tolerence))
+
 	len_a, len_b = len(a), len(b)
 
 	if a == b:
@@ -137,15 +252,26 @@ def exclude_common_strings(a, b, start_time=0, a_base=0, b_base=0, final=True, m
 			lcs_tuple = longest_common_string(a, b, start_time, max_tolerence)
 			if not lcs_tuple:  # max_tolerence reached
 				return False
-			(offset, length), pos = lcs_tuple  # the start pos of the common string in the shorter string, and its length, as well as the start pos of the common string in the longer string
+			(offset, length), pos, streaks_count = lcs_tuple  # the start pos of the common string in the shorter string, and its length, as well as the start pos of the common string in the longer string
 			if offset + length == 0:
 				return True
+			if depth == 0:
+				# if fishy (the longest_common_string is relatively short or too many streaks in place), redo it with v2
+				shorter_len = min(len_a, len_b)
+				if (shorter_len / length) > 10 or (shorter_len / streaks_count) < 20 and shorter_len > 500:
+					print("kinda fishy")
+					lcs_tuple = longest_common_string_v2(a, b, start_time, max_tolerence)
+					if not lcs_tuple:
+						return False
+					(offset, length), pos, streaks_count = lcs_tuple
+					if offset + length == 0:
+						return True
 			subtract_region(a_list if len_a <= len_b else b_list, offset, offset + length, False)
 			subtract_region(b_list if len_a <= len_b else a_list, pos, pos + length, False)
 			result = {}
 			for index in range(2):
 				if not (a_list[index][1] == a_list[index][0] and b_list[index][1] == b_list[index][0] or a[a_list[index][0]:a_list[index][1]] == b[b_list[index][0]:b_list[index][1]]):  # not (both have "end pos == start pos" or with same content)
-					result[index] = exclude_common_strings(a[a_list[index][0]:a_list[index][1]], b[b_list[index][0]:b_list[index][1]], start_time, a_list[index][0], b_list[index][0], False, max_tolerence)  # call itself for the new targets/regions after "subtraction"
+					result[index] = exclude_common_strings(a[a_list[index][0]:a_list[index][1]], b[b_list[index][0]:b_list[index][1]], depth+1, start_time, a_list[index][0], b_list[index][0], False, max_tolerence)  # call itself for the new targets/regions after "subtraction"
 			if result.get(0):  # lhs of the subtracted common string
 				a_list[0:1], b_list[0:1] = result[0][0], result[0][1]  # insert the process results of the region into the lists
 			if result.get(1):  # rhs of the subtracted common string
