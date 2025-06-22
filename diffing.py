@@ -75,13 +75,13 @@ def exclude_common_strings(a, b, start_time=0, a_base=0, b_base=0, final=True, m
 			lambda acc, x: (
 				current_streak_length(acc, x),
 				current_start(acc, x),
-				max(acc[2], current_streak_length(acc, x) + round((len(stream) - current_start(acc, x)) / scale, max_d_len))
+				max(acc[2], current_streak_length(acc, x) + round(((len(stream) - current_start(acc, x)) % len(stream)) / scale, max_d_len))
 			)
 		))
 
 		max_encoded = encoded[-1][2]
 		length = int(max_encoded)
-		start = len(stream) - round((max_encoded - length) * scale)
+		start = (len(stream) - round((max_encoded - length) * scale)) % len(stream)
 		return ((start, length) if max_encoded else (0, 0)), bao + start
 
 	def longest_common_string(a, b, start_time, max_tolerence):
