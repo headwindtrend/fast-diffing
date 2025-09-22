@@ -19,7 +19,7 @@ def subtract_region(regions, start, end, final=True):
 			regions[i:i+1] = new_regions  # Directly modify regions
 			return  # Exit after modifying the first match
 
-def exclude_common_strings(a, b, depth=0, start_time=0, a_base=0, b_base=0, final=True, max_tolerence=3):
+def exclude_common_strings(a, b, depth=0, start_time=0, a_base=0, b_base=0, v2_only=False, final=True, max_tolerence=3):
 	if not start_time:
 		start_time = time.time()
 
@@ -249,13 +249,13 @@ def exclude_common_strings(a, b, depth=0, start_time=0, a_base=0, b_base=0, fina
 
 	def exclude_common_strings_core():
 		if len_a > 1 and len_b > 1:
-			lcs_tuple = longest_common_string(a, b, start_time, max_tolerence)
+			lcs_tuple = longest_common_string(a, b, start_time, max_tolerence) if not v2_only else longest_common_string_v2(a, b, start_time, max_tolerence)
 			if not lcs_tuple:  # max_tolerence reached
 				return False
 			(offset, length), pos, streaks_count = lcs_tuple  # the start pos of the common string in the shorter string, and its length, as well as the start pos of the common string in the longer string
 			if offset + length == 0:
 				return True
-			if depth == 0:
+			if depth == 0 and not v2_only:
 				# if fishy (the longest_common_string is relatively short or too many streaks in place), redo it with v2
 				shorter_len = min(len_a, len_b)
 				if (shorter_len / length) > 10 or (shorter_len / streaks_count) < 20 and shorter_len > 500:
@@ -271,7 +271,7 @@ def exclude_common_strings(a, b, depth=0, start_time=0, a_base=0, b_base=0, fina
 			result = {}
 			for index in range(2):
 				if not (a_list[index][1] == a_list[index][0] and b_list[index][1] == b_list[index][0] or a[a_list[index][0]:a_list[index][1]] == b[b_list[index][0]:b_list[index][1]]):  # not (both have "end pos == start pos" or with same content)
-					result[index] = exclude_common_strings(a[a_list[index][0]:a_list[index][1]], b[b_list[index][0]:b_list[index][1]], depth+1, start_time, a_list[index][0], b_list[index][0], False, max_tolerence)  # call itself for the new targets/regions after "subtraction"
+					result[index] = exclude_common_strings(a[a_list[index][0]:a_list[index][1]], b[b_list[index][0]:b_list[index][1]], depth+1, start_time, a_list[index][0], b_list[index][0], False, False, max_tolerence)  # call itself for the new targets/regions after "subtraction"
 			if result.get(0):  # lhs of the subtracted common string
 				a_list[0:1], b_list[0:1] = result[0][0], result[0][1]  # insert the process results of the region into the lists
 			if result.get(1):  # rhs of the subtracted common string
